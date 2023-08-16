@@ -1,0 +1,136 @@
+version: "3.8"
+services:
+  mongodb:
+    image: mongo
+    container_name: mongodb
+    ports:
+      - 27017:27017
+    volumes:
+      - ./database:/data/db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=123456
+  mongo-express:
+    image: mongo-express
+    container_name: mongo-express
+    restart: always
+    ports:
+      - 8081:8081
+    environment:
+      - ME_CONFIG_MONGODB_ADMINUSERNAME=admin
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=123456
+      - ME_CONFIG_MONGODB_SERVER=mongodb
+
+  zookeeper:
+    image: zookeeper:latest
+    container_name: zookeeper
+    hostname: zookeeper
+    ports:
+      - "2181:2181"
+    volumes:
+      - /Users/zhaorunxiu/code_runxiu/test-x-env/data/zookeeper/data:/data
+      - /Users/zhaorunxiu/code_runxiu/test-x-env/data/zookeeper/datalog:/datalog
+      - /Users/zhaorunxiu/code_runxiu/test-x-env/data/zookeeper/logs:/logs
+    restart: always
+# 使用同一个自定义网络,这里要指定
+    networks:
+      - zk-net
+
+#  删除或重命名了某个服务，但没有执行 docker-compose down 命令将容器停止并删除, 执行 docker-compose down --remove-orphans
+  kafka1:
+    image: wurstmeister/kafka
+    # Each listener must have a different port, listeners: CLIENT://:9092,EXTERNAL://:9093
+    ports:
+      - "9093:9092"
+    # connecting to node (kafka1:9092) with internal address (client)
+    networks:
+      - zk-net
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      KAFKA_BROKER_ID: 1
+      KAFKA_INTER_BROKER_LISTENER_NAME: CLIENT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CLIENT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: CLIENT://kafka1:9092,EXTERNAL://127.0.0.1:9093
+      KAFKA_LISTENERS: CLIENT://:9092,EXTERNAL://:9093
+      ALLOW_PLAINTEXT_LISTENER: yes
+      KAFKA_LOG_DIRS: /data/kafka-data
+      KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      # <topic1>:<partitions>:<replication-factor>
+      # 一个 Broker 只能一个 replication,增加 Broker 数量(共3) 来实现3个 replication 的目的
+      KAFKA_CREATE_TOPICS: "test-gateway:3:1,test-service:3:1"
+    volumes:
+      - /Users/zhaorunxiu/code_runxiu/test-x-env/data/kafka1/data:/data/kafka-data
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    container_name: kafka1
+  kafka2:
+    image: wurstmeister/kafka
+    ports:
+      - "9094:9092"
+    networks:
+      - zk-net
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      KAFKA_BROKER_ID: 2
+      KAFKA_INTER_BROKER_LISTENER_NAME: CLIENT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CLIENT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: CLIENT://kafka2:9092,EXTERNAL://127.0.0.1:9094
+      KAFKA_LISTENERS: CLIENT://:9092,EXTERNAL://:9094
+      ALLOW_PLAINTEXT_LISTENER: yes
+      KAFKA_LOG_DIRS: /data/kafka-data
+      KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CREATE_TOPICS: "test-gateway:3:1,test-service:3:1"
+    volumes:
+      - /Users/zhaorunxiu/code_runxiu/test-x-env/data/kafka2/data:/data/kafka-data
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    container_name: kafka2
+  kafka3:
+    image: wurstmeister/kafka
+    ports:
+      - "9095:9092"
+    networks:
+      - zk-net
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      KAFKA_BROKER_ID: 3
+      KAFKA_INTER_BROKER_LISTENER_NAME: CLIENT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CLIENT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: CLIENT://kafka3:9092,EXTERNAL://127.0.0.1:9095
+      KAFKA_LISTENERS: CLIENT://:9092,EXTERNAL://:9095
+      ALLOW_PLAINTEXT_LISTENER: yes
+      KAFKA_LOG_DIRS: /data/kafka-data
+      KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CREATE_TOPICS: "test-gateway:3:1,test-service:3:1"
+    volumes:
+      - /Users/zhaorunxiu/code_runxiu/test-x-env/data/kafka3/data:/data/kafka-data
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    container_name: kafka3
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    networks:
+      - zk-net
+    container_name: kafka-ui
+    restart: always
+    ports:
+      - 8088:8080
+    volumes:
+      - /Users/zhaorunxiu/code_runxiu/test-x-env/etc/localtime:/etc/localtime
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka1:9092,kafka2:9092,kafka3:9092
+
+networks:
+  default:
+    name: mongodb_network
+#  docker network create zk-net
+  zk-net:
+    external: true
